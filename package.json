@@ -1,0 +1,19 @@
+{
+  "name": "opsboard",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && docker compose up -d postgres",
+    "dev:api": "npm --prefix backend run dev",
+    "dev:web": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "migrate": "npm --prefix backend run migrate",
+    "seed": "npm --prefix backend run seed"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "description": "Incident management demo application for a DevOps and CloudOps portfolio"
+}
