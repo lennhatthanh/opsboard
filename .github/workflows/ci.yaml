@@ -1,135 +1,207 @@
 name: Continuous Integration
 
 on:
-  pull_request:
-    branches:
-      - main
+    pull_request:
+        branches:
+            - main
 
-  push:
-    branches:
-      - main
+    push:
+        branches:
+            - main
 
-  workflow_dispatch:
+    workflow_dispatch:
 
 permissions:
-  contents: read
+    contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
-  backend-check:
-    name: Backend check
-    runs-on: ubuntu-latest
+    backend-check:
+        name: Backend check
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
+            - name: Set up Node.js
+              uses: actions/setup-node@v7
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: backend/package-lock.json
 
-      - name: Install backend dependencies
-        working-directory: backend
-        run: npm ci
+            - name: Install backend dependencies
+              working-directory: backend
+              run: npm ci
 
-      - name: Check backend syntax
-        run: find backend/src -name "*.js" -print0 | xargs -0 -n1 node --check
+            - name: Check backend syntax
+              run: find backend/src -name "*.js" -print0 | xargs -0 -n1 node --check
 
-  frontend-build:
-    name: Frontend build
-    runs-on: ubuntu-latest
+    frontend-build:
+        name: Frontend build
+        runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+            - name: Set up Node.js
+              uses: actions/setup-node@v7
+              with:
+                  node-version: "22"
+                  cache: npm
+                  cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
+            - name: Install frontend dependencies
+              working-directory: frontend
+              run: npm ci
 
-      - name: Build frontend
-        working-directory: frontend
-        run: npm run build
+            - name: Build frontend
+              working-directory: frontend
+              run: npm run build
 
-  docker-build:
-    name: Docker build
-    runs-on: ubuntu-latest
-    needs:
-      - backend-check
-      - frontend-build
+    docker-build:
+        name: Docker build
+        runs-on: ubuntu-latest
+        needs:
+            - backend-check
+            - frontend-build
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
 
-      - name: Build backend image
-        run: docker build -t opsboard-api:ci ./backend
+            - name: Build backend image
+              run: docker build -t opsboard-api:ci ./backend
 
-      - name: Build frontend image
-        run: docker build -t opsboard-web:ci ./frontend
+            - name: Build frontend image
+              run: docker build -t opsboard-web:ci ./frontend
 
-  publish-images:
-    name: Publish ${{ matrix.image }}
-    runs-on: ubuntu-latest
+    publish-images:
+        name: Publish ${{ matrix.image }}
+        runs-on: ubuntu-latest
 
-    needs:
-      - backend-check
-      - frontend-build
-      - docker-build
+        needs:
+            - backend-check
+            - frontend-build
+            - docker-build
 
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-    permissions:
-      contents: read
-      packages: write
+        permissions:
+            contents: read
+            packages: write
 
-    strategy:
-      fail-fast: false
+        strategy:
+            fail-fast: false
 
-      matrix:
-        include:
-          - image: opsboard-api
-            context: ./backend
+            matrix:
+                include:
+                    - image: opsboard-api
+                      context: ./backend
 
-          - image: opsboard-web
-            context: ./frontend
+                    - image: opsboard-web
+                      context: ./frontend
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v6
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+            - name: Log in to GHCR
+              uses: docker/login-action@v4
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v4
 
-      - name: Build and push image
-        uses: docker/build-push-action@v7
-        with:
-          context: ${{ matrix.context }}
-          push: true
+            - name: Build and push image
+              uses: docker/build-push-action@v7
+              with:
+                  context: ${{ matrix.context }}
+                  push: true
 
-          tags: |
-            ghcr.io/lennhatthanh/${{ matrix.image }}:${{ github.sha }}
+                  tags: |
+                      ghcr.io/lennhatthanh/${{ matrix.image }}:${{ github.sha }}
 
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+                  labels: |
+                      org.opencontainers.image.source=https://github.com/${{ github.repository }}
+                      org.opencontainers.image.revision=${{ github.sha }}
+
+    update-gitops:
+        name: Create GitOps deployment PR
+        runs-on: ubuntu-latest
+
+        needs:
+            - publish-images
+
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout GitOps repository
+              uses: actions/checkout@v6
+              with:
+                  repository: lennhatthanh/opsboard-gitops
+                  ref: main
+                  token: ${{ secrets.GITOPS_TOKEN }}
+                  path: opsboard-gitops
+                  fetch-depth: 0
+
+            - name: Update image tags
+              id: update
+              working-directory: opsboard-gitops
+              env:
+                  IMAGE_TAG: ${{ github.sha }}
+
+              run: |
+                  BRANCH="deploy/opsboard-${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}"
+
+                  echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+                  sed -i \
+                    "/name: opsboard-api/,/newTag:/ s/newTag:.*/newTag: ${IMAGE_TAG}/" \
+                    environments/local/opsboard/kustomization.yaml
+
+                  sed -i \
+                    "/name: opsboard-web/,/newTag:/ s/newTag:.*/newTag: ${IMAGE_TAG}/" \
+                    environments/local/opsboard/kustomization.yaml
+
+                  if git diff --quiet; then
+                    echo "changed=false" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+
+                  git config user.name "opsboard-ci"
+                  git config user.email "opsboard-ci@users.noreply.github.com"
+
+                  git switch -c "$BRANCH"
+                  git add environments/local/opsboard/kustomization.yaml
+                  git commit -m "deploy: update OpsBoard images to ${IMAGE_TAG}"
+                  git push --set-upstream origin "$BRANCH"
+
+                  echo "changed=true" >> "$GITHUB_OUTPUT"
+
+            - name: Create GitOps pull request
+              if: steps.update.outputs.changed == 'true'
+              working-directory: opsboard-gitops
+              env:
+                  GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+                  BRANCH: ${{ steps.update.outputs.branch }}
+                  IMAGE_TAG: ${{ github.sha }}
+
+              run: |
+                  gh pr create \
+                    --repo lennhatthanh/opsboard-gitops \
+                    --base main \
+                    --head "$BRANCH" \
+                    --title "deploy: release OpsBoard ${IMAGE_TAG:0:7}" \
+                    --body "Update OpsBoard API and web images to source commit \`${IMAGE_TAG}\`."
