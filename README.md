@@ -31,6 +31,42 @@ npm run migrate
 npm run seed
 ```
 
+## Full Docker Compose stack
+
+The full stack runs PostgreSQL, a one-shot database migration, the API, and the frontend on one Compose network:
+
+```powershell
+Copy-Item .env.example .env
+docker compose config
+docker compose up -d --build
+docker compose ps
+```
+
+On Linux or WSL, copy the environment file with:
+
+```bash
+cp .env.example .env
+```
+
+Open <http://localhost:8080>. The browser calls `/api` on the same origin; frontend Nginx proxies those requests to the internal `backend:4000` service. The backend reaches PostgreSQL through `postgres:5432`.
+
+Useful checks:
+
+```bash
+curl -fsS http://localhost:8080/health
+curl -fsS http://localhost:8080/api/incidents
+docker compose logs --tail 50 backend
+docker compose logs --tail 50 postgres
+```
+
+Stop and remove the containers and network while preserving PostgreSQL data:
+
+```bash
+docker compose down
+```
+
+`docker compose down -v` also deletes the PostgreSQL volume and all local database data. Use it only for an intentional reset.
+
 ## Operational endpoints
 
 - `GET /health`: liveness check without downstream dependencies
